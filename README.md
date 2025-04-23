@@ -79,71 +79,56 @@
     <pre>
 import math
 import pandas as pd
+import numpy as np
+from math import log2
 
-def calculate_entropy(data):
-    value_counts = data.value_counts()
-    total_records = len(data)
-    entropy = 0
-    for count in value_counts:
-        prob = count / total_records
-        entropy -= prob * math.log2(prob)
-    return entropy
+def entropy(data):
+    labels = data.iloc[:, -1]
+    classes = labels.unique()
+    return -sum((labels == c).mean() * log2((labels == c).mean()) for c in classes)
 
-def calculate_information_gain(data, attribute, target):
-    total_entropy = calculate_entropy(data[target])
-    unique_values = data[attribute].unique()
-    weighted_entropy = 0
-    for value in unique_values:
-        subset = data[data[attribute] == value]
-        weighted_entropy += (len(subset) / len(data)) * calculate_entropy(subset[target])
-    information_gain = total_entropy - weighted_entropy
-    return information_gain
+def info_gain(data, feature):
+    total_entropy = entropy(data)
+    values = data[feature].unique()
+    weighted_entropy = sum(
+        (data[feature] == v).mean() * entropy(data[data[feature] == v])
+        for v in values
+    )
+    return total_entropy - weighted_entropy
 
-def id3(data, target, attributes):
-    if len(data[target].unique()) == 1:
-        return data[target].iloc[0]
-    if not attributes:
-        return data[target].mode()[0]
-    info_gains = {attr: calculate_information_gain(data, attr, target) for attr in attributes}
-    best_attribute = max(info_gains, key=info_gains.get)
-    tree = {best_attribute: {}}
-    for value in data[best_attribute].unique():
-        subset = data[data[best_attribute] == value]
-        remaining_attributes = [attr for attr in attributes if attr != best_attribute]
-        subtree = id3(subset, target, remaining_attributes)
-        tree[best_attribute][value] = subtree
+def id3(data, features):
+    labels = data.iloc[:, -1]
+    
+    if len(labels.unique()) == 1:
+        return labels.iloc[0]
+    if not features:
+        return labels.mode()[0]
+    
+    gains = {f: info_gain(data, f) for f in features}
+    best = max(gains, key=gains.get)
+    tree = {best: {}}
+    
+    for val in data[best].unique():
+        subset = data[data[best] == val].drop(columns=best)
+        if subset.empty:
+            tree[best][val] = labels.mode()[0]
+        else:
+            tree[best][val] = id3(subset.reset_index(drop=True), [f for f in features if f != best])
+    
     return tree
 
-def classify(tree, sample):
-    if not isinstance(tree, dict):
-        return tree
-    attribute = next(iter(tree))
-    attribute_value = sample[attribute]
-    subtree = tree[attribute].get(attribute_value)
-    return classify(subtree, sample)
-
+# Example usage with Play Tennis dataset
 data = pd.DataFrame({
-    'Outlook': ['Sunny', 'Sunny', 'Overcast', 'Rainy', 'Rainy', 'Rainy', 'Overcast', 'Sunny', 'Sunny', 
-                'Rainy', 'Sunny', 'Overcast', 'Overcast', 'Rainy'],
-    'Temperature': ['Hot', 'Hot', 'Hot', 'Mild', 'Cool', 'Cool', 'Cool', 'Mild', 'Cool', 'Mild', 'Mild', 'Mild', 
-                    'Hot', 'Mild'],
-    'Humidity': ['High', 'High', 'High', 'High', 'Normal', 'Normal', 'Normal', 'High', 'Normal', 'Normal', 
-                 'Normal', 'High', 'Normal', 'High'],
-    'Wind': ['Weak', 'Strong', 'Weak', 'Weak', 'Weak', 'Strong', 'Strong', 'Weak', 'Weak', 'Weak', 
-             'Strong', 'Strong', 'Weak', 'Strong'],
-    'PlayTennis': ['No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'No']
+    'Outlook': ['Sunny', 'Sunny', 'Overcast', 'Rain', 'Rain', 'Rain', 'Overcast', 'Sunny', 'Sunny', 'Rain', 'Sunny', 'Overcast', 'Overcast', 'Rain'],
+    'Temperature': ['Hot', 'Hot', 'Hot', 'Mild', 'Cool', 'Cool', 'Cool', 'Mild', 'Cool', 'Mild', 'Mild', 'Mild', 'Hot', 'Mild'],
+    'Humidity': ['High', 'High', 'High', 'High', 'Normal', 'Normal', 'Normal', 'High', 'Normal', 'Normal', 'Normal', 'High', 'Normal', 'High'],
+    'Wind': ['Weak', 'Strong', 'Weak', 'Weak', 'Weak', 'Strong', 'Strong', 'Weak', 'Weak', 'Weak', 'Strong', 'Strong', 'Weak', 'Strong'],
+    'Play': ['No', 'No', 'Yes', 'Yes', 'Yes', 'No', 'Yes', 'No', 'Yes', 'Yes', 'Yes', 'Yes', 'Yes', 'No']
 })
 
-target = 'PlayTennis'
-attributes = ['Outlook', 'Temperature', 'Humidity', 'Wind']
-tree = id3(data, target, attributes)
-
-print("Decision Tree:")
-print(tree)
-
-sample = {'Outlook': 'Sunny', 'Temperature': 'Hot', 'Humidity': 'High', 'Wind': 'Weak'}
-result = classify(tree, sample)
-print(f"\nClassifying new sample {sample}: {result}")
+tree = id3(data, data.columns[:-1].tolist())
+from pprint import pprint
+pprint(tree)
     </pre>
   </div>
 
